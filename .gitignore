@@ -1,0 +1,21 @@
+# Run logs (SLURM, MARS, ecsbatch)
+logs/
+**/logs/
+ecsbatch.log.*
+*.log
+
+# Python / Jupyter
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Data (raw and intermediate data live under /ec/vol/enscal and /perm)
+*.grib
+*.grib1
+*.grib2
+*.bufr
+*.parquet
+*.nc
+
+# Generated plots and score tables (reproducible from the scripts)
+verification_results/

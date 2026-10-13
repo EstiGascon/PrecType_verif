@@ -1,0 +1,11 @@
+
+RETRIEVE,
+  REPRES = BUFR,
+  TYPE = OB,
+  OBSTYPE = 1/2/170/172/176/178,
+  DATE   =  2024-03-30, 
+  TIME = 00,
+  RANGE = 1439,
+  AREA = 71/-11/33/35,
+  TARGET = "/ec/vol/enscal/VERIF_PrecipType/VERIF_ptype_all/SYNOP/2023_2024/SYNOP_mannual_2024-03-30.bufr" 
+

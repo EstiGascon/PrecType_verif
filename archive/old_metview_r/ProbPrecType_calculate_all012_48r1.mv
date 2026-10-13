@@ -1,0 +1,122 @@
+## Metview macro for version 4.8
+#
+# PROBABILITY OF PRECIPITATION TYPE (%)
+#---------------------------------------
+#
+# Estibaliz Gascon 12/01/2017
+#
+########################################
+
+################################################################################
+# DEFINE INPUTS 
+#fdates =[20211021,20211022,20211023,20211024,20211025,20211026,20211027,20211028,20211029,20211030,20211031,20211101,20211102,20211103,20211104,20211105,20211106,20211107,20211108,20211109,20211110,20211111,20211112,20211113,20211114,20211115,20211116,20211117,20211118,20211119,20211120,20211121,20211122,20211123,20211124,20211125,20211126,20211127,20211128,20211129,20211130,20211201,20211202,20211203,20211204,20211205,20211206,20211207,20211208,20211209,20211210,20211211,20211212,20211213,20211214,20211215,20211216,20211217,20211218,20211219,20211220,20211221,20211222,20211223,20211224,20211225,20211226,20211227,20211228,20211229,20211230,20211231,20220101,20220102,20220103,20220104,20220105,20220106,20220107,20220108,20220109,20220110,20220111,20220112,20220113,20220114,20220115,20220116,20220117,20220118,20220119,20220120,20220121,20220122,20220123,20220124,20220125,20220126,20220127,20220128,20220129,20220130,20220131,20220201,20220202,20220203,20220204,20220205,20220206,20220207,20220208,20220209,20220210,20220211,20220212,20220213,20220214,20220215,20220216,20220217,20220218,20220219,20220220,20220221,20220222,20220223,20220224,20220225,20220226,20220227,20220228,20220301,20220302,20220303,20220304,20220305,20220305,20220306,20220307,20220308,20220309,20220310,20220311,20220312,20220313,20220314,20220315,20220316,20220317,20220318,20220319,20220320,20220321,20220322,20220323,20220324,20220325,20220324,20220325,20220325,20220326,20220327,20220328,20220329,20220330,20220331]
+prec_rate_threshold = 0.12
+prec_rate_thresholdSTR = "012"
+years = "esuite48r1_2023"
+start_day = 2023-03-15
+end_day =2023-03-31
+###############################################################################
+
+for day = start_day to end_day do
+
+    fdate = yyyymmdd(day)
+    PATH = "/ec/vol/enscal/VERIF_PrecipType/VERIF_ptype_all/raw/raw_" & years & "/"
+    PATH_OUT = "/ec/vol/enscal/VERIF_PrecipType/VERIF_ptype_bias/raw/48r1_2023_esuite/rawENS/ENS" & prec_rate_thresholdSTR & "prate/" & fdate & "_0/"
+
+    shell("mkdir -p " & PATH_OUT)
+
+    print(fdate)
+
+    lsteps = [0,3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,96,99,102,105,108,111,114,117,120]
+
+    # Read the files and crop them for Europe
+    Prectype_raw_world = read(PATH & "Prectype_raw_VERIF_" & fdate & ".grib")
+    total_prec_world_pre = read(PATH & "total_prec_VERIF_" & fdate & ".grib")
+
+    total_prec_world = total_prec_world_pre
+
+    Prectype_raw = read(
+        interpolation : "nearest neighbour",
+        area : [71,-11,33,35],
+        data :  Prectype_raw_world
+        )
+
+    total_prec = read(
+        interpolation : "nearest neighbour",
+        gaussian : "regular",
+        area : [71,-11,33,35],
+        data :  total_prec_world
+        )
+
+
+    print('Start of probabilities calculation') 
+
+  #  List_steps_ENS = grib_get_long(Prectype_raw,        "step")
+
+    # Calculate probability of precipitation type per each step
+    loop steps in lsteps
+        print(steps)
+
+        Prectype_raw = read( 
+            data :  Prectype_raw_world,
+            step: steps)
+            
+        prec = read(
+            data :  total_prec_world,
+            step: steps)
+            
+        pthres = (prec>=prec_rate_threshold)
+
+        rain = (Prectype_raw=1)
+        rain = rain*pthres
+        rain = sum(rain)
+        rain = rain/51*100
+        perc_rain =  rain
+
+        freezrain = (Prectype_raw=3)
+        freezrain = freezrain*pthres
+        freezrain = sum(freezrain)
+        freezrain = freezrain/51*100
+        perc_freezrain =  freezrain
+
+        snow = (Prectype_raw=5)
+        snow = snow*pthres
+        snow = sum(snow)
+        snow = snow/51*100
+        perc_snow =  snow
+
+        wetsnow = (Prectype_raw=6)
+        wetsnow = wetsnow*pthres
+        wetsnow = sum(wetsnow)
+        wetsnow = wetsnow/51*100
+        perc_wetsnow =  wetsnow
+
+        sleet = (Prectype_raw=7)
+        sleet = sleet*pthres
+        sleet = sum(sleet)
+        sleet = sleet/51*100
+        perc_sleet =  sleet
+
+        icepellets = (Prectype_raw=8)
+        icepellets = icepellets*pthres
+        icepellets = sum(icepellets)
+        icepellets = icepellets/51*100
+        perc_icepellets =  icepellets    
+        
+        freezdrizzle = (Prectype_raw=12)
+        freezdrizzle = freezdrizzle*pthres
+        freezdrizzle = sum(freezdrizzle)
+        freezdrizzle = freezdrizzle/51*100
+        perc_freezdrizzle =  freezdrizzle
+
+        write(PATH_OUT & "perc_rain_" & steps & ".grib",perc_rain)
+        write(PATH_OUT & "perc_snow_" & steps & ".grib",perc_snow)
+        write(PATH_OUT & "perc_wetsnow_" & steps & ".grib",perc_wetsnow)
+        write(PATH_OUT & "perc_sleet_" & steps & ".grib",perc_sleet)
+        write(PATH_OUT & "perc_freezrain_" & steps & ".grib",perc_freezrain)
+        write(PATH_OUT & "perc_freezdrizzle_" & steps & ".grib",perc_freezdrizzle)
+        write(PATH_OUT & "perc_icepellets_" & steps & ".grib",perc_icepellets)
+
+    end loop
+
+end for

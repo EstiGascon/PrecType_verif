@@ -1,0 +1,163 @@
+#Metview Macro
+
+
+time  =  0 
+lsteps = [0,3,6,9,12,15,18,21,24,27,30,33,36,39,42,45,48,51,54,57,60,63,66,69,96,99,102,105,108,111,114,117,120]
+start_day = 2023-03-16
+end_day = 2023-04-15
+
+for day = start_day to end_day do
+
+    fdate = yyyymmdd(day)
+    print('Working date:' & fdate)  
+    end_steps = count(lsteps)
+
+
+##### READ MODEL ############
+
+ PATH_OROG_in =  '/ec/vol/enscal/VERIF_PrecipType/VERIF_ptype_bias/raw/48r1_2023_esuite/' 
+ PATH_MODEL_in =  '/ec/vol/enscal/VERIF_PrecipType/VERIF_ptype_bias/raw/48r1_2023_esuite/rawENS/ENS002prate/' & fdate & '_0/' 
+ PATH_MODEL_out =  '/ec/vol/enscal/VERIF_PrecipType/VERIF_ptype_bias/DATA_verif/2023_48r1_esuite/ENS_Europe/ENS002_Europe/' 
+ PATH_SYNOP_in =  '/ec/vol/enscal/VERIF_PrecipType/VERIF_ptype_all/SYNOP/2023_48r1esuite/' 
+ PATH_SYNOP_out = '/ec/vol/enscal/VERIF_PrecipType/VERIF_ptype_bias/DATA_verif/2023_48r1_esuite/SYN_Europe/SYN002_Europe/' 
+ 
+ shell("mkdir -p " & PATH_MODEL_out)
+ shell("mkdir -p " & PATH_SYNOP_out)
+ 
+for i = 1 to end_steps by 1 do
+
+print('step:' & lsteps[i])
+rain_filter = read(PATH_MODEL_in & "perc_rain_" & lsteps[i] & ".grib")
+snow_filter = read(PATH_MODEL_in & "perc_snow_" & lsteps[i] & ".grib")
+wetsnow_filter = read(PATH_MODEL_in & "perc_wetsnow_" & lsteps[i] & ".grib")
+freezrain_filter = read(PATH_MODEL_in & "perc_freezrain_" & lsteps[i] & ".grib")
+freezdrizzle_filter = read(PATH_MODEL_in & "perc_freezdrizzle_" & lsteps[i] & ".grib")
+icepellets_filter = read(PATH_MODEL_in & "perc_icepellets_" & lsteps[i] & ".grib")
+sleet_filter = read(PATH_MODEL_in & "perc_sleet_" & lsteps[i] & ".grib")
+
+orog = read(PATH_OROG_in & "orog.grib")
+
+Locations_rain = nil
+Locations_snow = nil
+Locations_wetsnow = nil
+Locations_freezrain = nil
+Locations_freezdrizzle = nil
+Locations_sleet = nil
+Locations_icepellets = nil
+Locations_dry = nil
+    
+fdate_SYN = valid_date(rain_filter)
+
+###### SYNOP ##########
+#SYNOP_data = read(PATH_SYNOP_in & "SYNOP_mannual_" & fdate_SYN & ".bufr")
+
+if lsteps[i] >= 0 and lsteps[i] <= 23 then
+fdate_SYN = yyyymmdd(date(fdate))
+lstep = lsteps[i]
+end if
+
+if lsteps[i] > 23 and lsteps[i] <= 47 then
+fdate_SYN = yyyymmdd(date(fdate + 1))
+lstep = lsteps[i]-24
+end if
+
+if lsteps[i] > 47 and lsteps[i] <= 71 then
+fdate_SYN = yyyymmdd(date(fdate + 2))
+lstep = lsteps[i]-48
+end if
+
+if lsteps[i] > 71 and lsteps[i] <= 95 then
+fdate_SYN = yyyymmdd(date(fdate + 3))
+lstep = lsteps[i]-72
+end if
+
+if lsteps[i] > 95 and lsteps[i] <= 119 then
+fdate_SYN = yyyymmdd(date(fdate + 4))
+lstep = lsteps[i]-96
+end if
+
+if lsteps[i] > 119 and lsteps[i] <= 143 then
+fdate_SYN = yyyymmdd(date(fdate + 5))
+lstep = lsteps[i]-120
+end if
+
+if lsteps[i] > 143 and lsteps[i] <= 167 then
+fdate_SYN = yyyymmdd(date(fdate + 6))
+lstep = lsteps[i]-144
+end if
+
+
+SYNOP_data = read(PATH_SYNOP_in & "SYNOP_mannual_" & fdate_SYN & ".bufr")
+
+print("date_SYNOP:" & fdate_SYN)
+print("time_SYNOP:" & lstep)
+
+obs_max = obsfilter(
+    output          : "geopoints",
+    parameter       : 020003,
+    time            : lstep,
+    location_filter : "area",
+    area            : [71,-11,33,35],
+    data            : SYNOP_data
+    )
+    
+observ_height = obsfilter(
+    output          : "geopoints",
+    parameter       : 07001,
+    time            : lstep,
+    location_filter : "area",
+    area            : [71,-11,33,35],
+    data            : SYNOP_data
+    )    
+
+Locations_orog = (nearest_gridpoint(orog,obs_max))
+obs_height = (subsample(observ_height,obs_max))
+diff_orog =  obs_height - Locations_orog 
+diff_orog_200m = (diff_orog<200 and diff_orog>-200)
+obs_ = filter(obs_max,diff_orog_200m=1)
+Miss = (obs_=508 or obs_=509 or obs_=510 or obs_=511 or obs_>100)
+obs = filter(obs_,Miss=0)
+
+Locations_rain = (nearest_gridpoint(rain_filter,obs))
+Locations_snow = (nearest_gridpoint(snow_filter,obs))
+Locations_wetsnow = (nearest_gridpoint(wetsnow_filter,obs))
+Locations_sleet = (nearest_gridpoint(sleet_filter,obs))
+Locations_freezrain = (nearest_gridpoint(freezrain_filter,obs))
+Locations_freezdrizzle = (nearest_gridpoint(freezdrizzle_filter,obs))
+Locations_icepellets = (nearest_gridpoint(icepellets_filter,obs))
+
+write(PATH_MODEL_out & "Loc_rain_" & fdate & '_' & lsteps[i] & ".gpt",Locations_rain)
+write(PATH_MODEL_out & "Loc_snow_" & fdate & '_' & lsteps[i] & ".gpt",Locations_snow)
+write(PATH_MODEL_out & "Loc_wetsnow_" & fdate & '_' & lsteps[i] & ".gpt",Locations_wetsnow)
+write(PATH_MODEL_out & "Loc_freezrain_" & fdate & '_' & lsteps[i] & ".gpt",Locations_freezrain)
+write(PATH_MODEL_out & "Loc_freezrain_" & fdate & '_' & lsteps[i] & ".gpt",Locations_freezrain)
+write(PATH_MODEL_out & "Loc_freezdrizzle_" & fdate & '_' & lsteps[i] & ".gpt",Locations_freezdrizzle)
+write(PATH_MODEL_out & "Loc_sleet_" & fdate & '_' & lsteps[i] & ".gpt",Locations_sleet)
+write(PATH_MODEL_out & "Loc_icepellets_" & fdate & '_' & lsteps[i] & ".gpt",Locations_icepellets)
+
+Rain_SYNOP = (obs=51 or obs=52 or obs=53 or obs=54 or obs=55 or obs=58 or obs=59 or obs=60 or obs=61 or obs=62 or obs=63 or obs=64 or obs=65 or obs=68 or obs=69 or obs=80 or obs=81 or obs=82 or obs=87 or obs=88 or obs=89 or obs=90 or obs=91 or obs=92 or obs=93 or obs=94 or obs=95 or obs=96 or obs=97 or obs=99)
+
+Snow_SYNOP = (obs=70 or obs=71 or obs=72 or obs=73 or obs=74 or obs=75 or obs=76 or obs=77 or obs=78 or obs=85 or obs=86 or obs=93 or obs=94 or obs=95 or obs=97)
+
+Icepellets_SYNOP = (obs=79 or obs=87 or obs=77)
+
+Freezing_SYNOP = (obs=66 or obs=67)
+
+Freezdrizzle_SYNOP = (obs=56 or obs=57)
+
+Sleet_SYNOP = (obs=68 or obs=69 or obs=83 or obs=84 or obs=87 or obs=88 or obs=89 or obs=90 or obs=93 or obs=94 or obs=95 or obs=97)
+
+Dry_SYNOP = (obs<>52 and obs<>53 and obs<>54 and obs<>55 and obs<>58 and obs<>59 and obs<>60 and obs<>61 and obs<>62 and obs<>63 and obs<>64 and obs<>65 and obs<>68 and obs<>69 and obs<>80 and obs<>81 and obs<>82 and obs<>87 and obs<>88 and obs<>89 and obs<>90 and obs<>91 and obs<>92 and obs<>93 and obs<>94 and obs<>95 and obs<>96 and obs<>97 and obs<>99 and obs<>70 and obs<>71 and obs<>72 and obs<>73 and obs<>74 and obs<>75 and obs<>76 and obs<>77 and obs<>78 and obs<>85 and obs<>86 and obs<>93 and obs<>94 and obs<>95 and obs<>97 and obs<>79 and obs<>87 and obs<>77 and obs<>57 and obs<>66 and obs<>67 and obs<>68 and obs<>69 and obs<>83 and obs<>84 and obs<>87 and obs<>88 and obs<>89 and obs<>90 and obs<>93 and obs<>94 and obs<>95 and obs<>97)
+
+
+write(PATH_SYNOP_out & "SYNOP_rain_" & fdate & '_' & lsteps[i] & ".gpt",Rain_SYNOP)
+write(PATH_SYNOP_out & "SYNOP_snow_" & fdate & '_' & lsteps[i] & ".gpt",Snow_SYNOP)
+write(PATH_SYNOP_out & "SYNOP_icepellets_" & fdate & '_' & lsteps[i] & ".gpt",Icepellets_SYNOP)
+write(PATH_SYNOP_out & "SYNOP_freezrain_" & fdate & '_' & lsteps[i] & ".gpt",Freezing_SYNOP)
+write(PATH_SYNOP_out & "SYNOP_freezdrizzle_" & fdate & '_' & lsteps[i] & ".gpt",Freezdrizzle_SYNOP)
+write(PATH_SYNOP_out & "SYNOP_sleet_" & fdate & '_' & lsteps[i] & ".gpt",Sleet_SYNOP)
+#write(PATH_SYNOP_out & "SYNOP_dry_" & fdate & '_' & lsteps[i] & ".gpt",Dry_SYNOP)
+
+end for
+
+end for 

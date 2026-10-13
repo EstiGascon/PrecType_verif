@@ -1,0 +1,104 @@
+#Metview Macro
+#
+# Observation-side ".gpt" extraction for the "old" (Metview obsfilter) FBI
+# reference methodology, adapted for the 2025_2026 (expver=0080) dataset.
+#
+# Unlike the original Metview_preVerif00X macros (which looped per forecast
+# date/step and re-ran obsfilter separately for every one, causing massive
+# redundant work), this macro is keyed by VALID calendar date only, and
+# extracts all 8 synoptic hours (0,3,...,21) from a single BUFR read.  Since
+# many forecast-date/step combinations share the same valid date/hour, this
+# avoids re-decoding the same BUFR data thousands of times. The obsfilter
+# station-selection logic itself (present-weather codes, orography filter,
+# missing-value filter) is UNCHANGED from the original macros, so results
+# are methodologically identical to the historical reference.
+#
+# Parameters (via environment variables):
+#   VALID_DATE  - YYYYMMDD (the calendar date of the BUFR file to read)
+#   SYNOP_DIR   - directory containing SYNOP_YYYY-MM-DD.bufr files
+#   OROG_FILE   - path to orog.grib
+#   OUT_DIR     - output directory for the cached .gpt files
+#
+################################################################################
+
+vdate     = "" & getenv("VALID_DATE")
+synop_dir = "" & getenv("SYNOP_DIR")
+orog_file = "" & getenv("OROG_FILE")
+out_dir   = "" & getenv("OUT_DIR")
+
+shell("mkdir -p " & out_dir)
+
+# Build hyphenated filename: YYYYMMDD -> YYYY-MM-DD
+yyyy = substring(vdate,1,4)
+mm   = substring(vdate,5,6)
+dd   = substring(vdate,7,8)
+bufr_file = synop_dir & "/SYNOP_" & yyyy & "-" & mm & "-" & dd & ".bufr"
+
+print("Valid date: " & vdate & "  file: " & bufr_file)
+
+SYNOP_data = read(bufr_file)
+orog       = read(orog_file)
+
+hours = [0,3,6,9,12,15,18,21]
+
+for h = 1 to count(hours) by 1 do
+
+    hour = hours[h]
+    print("  hour: " & hour)
+
+    obs_max = obsfilter(
+        output          : "geopoints",
+        parameter       : 020003,
+        time            : hour,
+        location_filter : "area",
+        area            : [71,-11,33,35],
+        data            : SYNOP_data
+        )
+
+    observ_height = obsfilter(
+        output          : "geopoints",
+        parameter       : 07001,
+        time            : hour,
+        location_filter : "area",
+        area            : [71,-11,33,35],
+        data            : SYNOP_data
+        )
+
+    Locations_orog = (nearest_gridpoint(orog,obs_max))
+    obs_height     = (subsample(observ_height,obs_max))
+    diff_orog      =  obs_height - Locations_orog
+    diff_orog_200m = (diff_orog<200 and diff_orog>-200)
+    obs_           = filter(obs_max,diff_orog_200m=1)
+
+    Miss = (obs_=508 or obs_=509 or obs_=510 or obs_=511 or obs_>100)
+    obs  = filter(obs_,Miss=0)
+
+    n_stations = count(obs)
+    print("    stations after filtering: " & n_stations)
+
+    # Master station list (lat/lon), value = raw ww code (used by the Python
+    # model-side script to build a matching nearest-neighbour station index)
+    write(out_dir & "/STATIONS_" & vdate & "_" & hour & ".gpt", obs)
+
+    Rain_SYNOP = (obs=51 or obs=52 or obs=53 or obs=54 or obs=55 or obs=58 or obs=59 or obs=60 or obs=61 or obs=62 or obs=63 or obs=64 or obs=65 or obs=68 or obs=69 or obs=80 or obs=81 or obs=82 or obs=87 or obs=88 or obs=89 or obs=90 or obs=91 or obs=92 or obs=93 or obs=94 or obs=95 or obs=96 or obs=97 or obs=99)
+
+    Snow_SYNOP = (obs=70 or obs=71 or obs=72 or obs=73 or obs=74 or obs=75 or obs=76 or obs=77 or obs=78 or obs=85 or obs=86 or obs=93 or obs=94 or obs=95 or obs=97)
+
+    Icepellets_SYNOP = (obs=79 or obs=87 or obs=77)
+
+    Freezing_SYNOP = (obs=66 or obs=67)
+
+    Freezdrizzle_SYNOP = (obs=56 or obs=57)
+
+    Sleet_SYNOP = (obs=68 or obs=69 or obs=83 or obs=84 or obs=87 or obs=88 or obs=89 or obs=90 or obs=93 or obs=94 or obs=95 or obs=97)
+
+    write(out_dir & "/SYNOP_rain_"         & vdate & "_" & hour & ".gpt", Rain_SYNOP)
+    write(out_dir & "/SYNOP_snow_"         & vdate & "_" & hour & ".gpt", Snow_SYNOP)
+    write(out_dir & "/SYNOP_icepellets_"   & vdate & "_" & hour & ".gpt", Icepellets_SYNOP)
+    write(out_dir & "/SYNOP_freezrain_"    & vdate & "_" & hour & ".gpt", Freezing_SYNOP)
+    write(out_dir & "/SYNOP_freezdrizzle_" & vdate & "_" & hour & ".gpt", Freezdrizzle_SYNOP)
+    write(out_dir & "/SYNOP_sleet_"        & vdate & "_" & hour & ".gpt", Sleet_SYNOP)
+
+end for
+
+print("Done: " & vdate)
